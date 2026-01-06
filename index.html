@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/digitallytailored/classless@latest/classless.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Quiz</title>
+    <style>
+      .question { margin-bottom: 20px; }
+      .question button:disabled {
+        background-color: lightgray;
+      }
+      .question ul {
+        list-style-type: none;
+      }
+      .question li {
+        margin: 5px 0;
+      }
+    </style>
+    <script>
+      class Field { 
+        question = "";
+        answer = ""; 
+        wrong = [];
+        answered = false;  // Track if the question has been answered
+        
+        constructor(question, answer, wrong) {
+          this.question = question;
+          this.answer = answer;
+          this.wrong = wrong;
+        }
+        
+        get_shuffled_answers() {
+          const allAnswers = [this.answer, ...this.wrong];
+          return this.shuffle(allAnswers);
+        }
+
+        shuffle(array) {
+          for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+          }
+          return array;
+        }
+      }
+
+      let fields = []; // Will hold all the quiz questions and answers
+      let correctAnswers = 0;
+      let totalAnswered = 0;
+
+      function load_CSV() {
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput.files.length > 0) {
+          const reader = new FileReader();
+          reader.onload = handleFileLoad;
+          reader.readAsText(fileInput.files[0]);
+        }
+      }
+
+      function handleFileLoad(event) {
+        const csvContent = event.target.result;
+        fields = csvContent.split('\n').map(parseRow).filter(field => field);
+        quiz_populate();
+      }
+
+      function parseRow(row) {
+        const cols = row.split(',');
+        if (cols.length >= 2) {
+          const question = cols[0];
+          const answer = cols[1];
+          const wrong = cols.slice(2);  // Allow any number of wrong answers
+          return new Field(question, answer, wrong);
+        }
+        return null;
+      }
+
+      function quiz_populate() {
+        const quizContainer = document.getElementById('quiz');
+        quizContainer.innerHTML = ''; // Clear previous quiz content
+
+        fields.forEach((field, index) => {
+          const questionElement = createQuestionElement(field, index);
+          quizContainer.appendChild(questionElement);
+        });
+
+        update_totals();
+      }
+
+      function createQuestionElement(field, index) {
+        const template = document.getElementById('question-template');
+        const clone = document.importNode(template.content, true);
+
+        clone.querySelector('p').innerText = field.question;
+        const answers = field.get_shuffled_answers();
+        const answerList = clone.querySelector('ul');
+
+        answers.forEach((answer, btnIndex) => {
+          const buttonItem = createAnswerButton(answer, field, btnIndex);
+          answerList.appendChild(buttonItem);
+        });
+
+        return clone;
+      }
+
+      function createAnswerButton(answer, field, btnIndex) {
+        const buttonTemplate = document.getElementById('button-template');
+        const buttonClone = document.importNode(buttonTemplate.content, true);
+
+        const button = buttonClone.querySelector('button');
+        button.innerText = answer;
+        button.disabled = field.answered;
+        button.onclick = () => on_answer(field, button, answer === field.answer);
+
+        return buttonClone;
+      }
+
+      function on_answer(field, button, isCorrect) {
+        if (!field.answered) {
+          field.answered = true;
+          totalAnswered++;
+
+          // Update button state
+          if (isCorrect) {
+            button.classList.add('success');
+            correctAnswers++;
+          } else {
+            button.classList.add('danger');
+          }
+
+          button.disabled = true;  // Disable the button after selection
+        }
+
+        update_totals();
+      }
+
+      function update_totals() {
+        document.getElementById('correct').innerText = correctAnswers;
+        document.getElementById('answered').innerText = totalAnswered;
+        document.getElementById('total').innerText = fields.length;
+        update_perc();
+      }
+
+      function update_perc() {
+        const percent = Math.floor((correctAnswers / fields.length) * 100) || 0;
+        document.getElementById('percent').innerText = percent;
+      }
+
+      function on_upload(event) {
+        load_CSV();
+      }
+
+    </script>
+</head>
+<body>
+  
+  <template id="question-template">
+    <div class="question">
+      <p>{{question}}</p>
+      <ul>
+        <!-- Dynamically generated answer buttons will go here -->
+      </ul>
+    </div>
+  </template>
+
+  <!-- Template for each answer button -->
+  <template id="button-template">
+    <li><button>{{A}}</button></li>
+  </template>
+  
+  <div style="font-size:120%;font-weight:bold;text-align:center">
+    <input type="file" onchange="on_upload(event)" />
+  </div>
+  
+  <div id="quiz" style="min-height:100vh">
+    <!-- Quiz content will be dynamically inserted here -->
+  </div>
+  
+  <div style="font-size:120%;font-weight:bold;text-align:center">
+    <output id="percent">0</output> %
+    <output id="correct">0</output> / 
+    <output id="answered">0</output> / 
+    <output id="total">0</output>
+  </div>
+
+</body>
+</html>
+
