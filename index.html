@@ -6,131 +6,117 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Quiz</title>
+
     <style>
-      .question { margin-bottom: 20px; }
-      .question button:disabled {
-        background-color: lightgray;
-      }
-      .question ul {
-        list-style-type: none;
-      }
-      .question li {
-        margin: 5px 0;
-      }
+      body { padding: 5em 1em; }
+      .question { margin-bottom: 1.5em; }
+      .question ul { list-style-type: none; }
+      .question li { margin: 5px 0; }
     </style>
+
     <script>
-      class Field { 
+      class Field {
         question = "";
-        answer = ""; 
+        answer = "";
         wrong = [];
-        answered = false;  // Track if the question has been answered
-        
-        constructor(question, answer, wrong) {
-          this.question = question;
-          this.answer = answer;
-          this.wrong = wrong;
-        }
-        
-        get_shuffled_answers() {
-          const allAnswers = [this.answer, ...this.wrong];
-          return this.shuffle(allAnswers);
+        answered = false;
+
+        constructor(q, a, w) {
+          this.question = q;
+          this.answer = a;
+          this.wrong = w;
         }
 
-        shuffle(array) {
-          for (let i = array.length - 1; i > 0; i--) {
+        get_shuffled_answers() {
+          return this.shuffle([this.answer, ...this.wrong]);
+        }
+
+        shuffle(arr) {
+          for (let i = arr.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
+            [arr[i], arr[j]] = [arr[j], arr[i]];
           }
-          return array;
+          return arr;
         }
       }
 
-      let fields = []; // Will hold all the quiz questions and answers
+      let fields = [];
       let correctAnswers = 0;
       let totalAnswered = 0;
 
-      function load_CSV() {
-        const fileInput = document.querySelector('input[type="file"]');
-        if (fileInput.files.length > 0) {
-          const reader = new FileReader();
-          reader.onload = handleFileLoad;
-          reader.readAsText(fileInput.files[0]);
-        }
-      }
-
-      function handleFileLoad(event) {
-        const csvContent = event.target.result;
-        fields = csvContent.split('\n').map(parseRow).filter(field => field);
+      function handleCSV(csv) {
+        correctAnswers = 0;
+        totalAnswered = 0;
+        fields = csv.split('\n').map(parseRow).filter(Boolean);
         quiz_populate();
       }
 
       function parseRow(row) {
-        const cols = row.split(',');
-        if (cols.length >= 2) {
-          const question = cols[0];
-          const answer = cols[1];
-          const wrong = cols.slice(2);  // Allow any number of wrong answers
-          return new Field(question, answer, wrong);
+        const c = row.split(',');
+        return c.length >= 2 ? new Field(c[0], c[1], c.slice(2)) : null;
+      }
+
+      function load_CSV() {
+        const f = document.getElementById('fileInput');
+        if (f.files.length) {
+          const r = new FileReader();
+          r.onload = e => handleCSV(e.target.result);
+          r.readAsText(f.files[0]);
         }
-        return null;
+      }
+
+      async function paste_CSV() {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) handleCSV(text);
+        } catch (e) {
+          alert("Clipboard access denied");
+        }
       }
 
       function quiz_populate() {
-        const quizContainer = document.getElementById('quiz');
-        quizContainer.innerHTML = ''; // Clear previous quiz content
-
-        fields.forEach((field, index) => {
-          const questionElement = createQuestionElement(field, index);
-          quizContainer.appendChild(questionElement);
-        });
-
+        const q = document.getElementById('quiz');
+        q.innerHTML = '';
+        fields.forEach(f => q.appendChild(createQuestionElement(f)));
         update_totals();
       }
 
-      function createQuestionElement(field, index) {
-        const template = document.getElementById('question-template');
-        const clone = document.importNode(template.content, true);
+      function createQuestionElement(field) {
+        const t = document.getElementById('question-template');
+        const c = document.importNode(t.content, true);
+        c.querySelector('p').innerText = field.question;
 
-        clone.querySelector('p').innerText = field.question;
-        const answers = field.get_shuffled_answers();
-        const answerList = clone.querySelector('ul');
+        const ul = c.querySelector('ul');
+        field.get_shuffled_answers().forEach(a =>
+          ul.appendChild(createAnswerButton(a, field))
+        );
 
-        answers.forEach((answer, btnIndex) => {
-          const buttonItem = createAnswerButton(answer, field, btnIndex);
-          answerList.appendChild(buttonItem);
-        });
-
-        return clone;
+        return c;
       }
 
-      function createAnswerButton(answer, field, btnIndex) {
-        const buttonTemplate = document.getElementById('button-template');
-        const buttonClone = document.importNode(buttonTemplate.content, true);
+      function createAnswerButton(answer, field) {
+        const t = document.getElementById('button-template');
+        const c = document.importNode(t.content, true);
+        const b = c.querySelector('button');
 
-        const button = buttonClone.querySelector('button');
-        button.innerText = answer;
-        button.disabled = field.answered;
-        button.onclick = () => on_answer(field, button, answer === field.answer);
+        b.innerText = answer;
+        b.onclick = () => on_answer(field, b, answer === field.answer);
 
-        return buttonClone;
+        return c;
       }
 
-      function on_answer(field, button, isCorrect) {
+      function on_answer(field, button, ok) {
         if (!field.answered) {
           field.answered = true;
           totalAnswered++;
 
-          // Update button state
-          if (isCorrect) {
+          if (ok) {
             button.classList.add('success');
             correctAnswers++;
           } else {
             button.classList.add('danger');
           }
-
-          button.disabled = true;  // Disable the button after selection
         }
-
         update_totals();
       }
 
@@ -138,51 +124,45 @@
         document.getElementById('correct').innerText = correctAnswers;
         document.getElementById('answered').innerText = totalAnswered;
         document.getElementById('total').innerText = fields.length;
-        update_perc();
+        document.getElementById('percent').innerText =
+          Math.floor((correctAnswers / fields.length) * 100) || 0;
       }
-
-      function update_perc() {
-        const percent = Math.floor((correctAnswers / fields.length) * 100) || 0;
-        document.getElementById('percent').innerText = percent;
-      }
-
-      function on_upload(event) {
-        load_CSV();
-      }
-
     </script>
 </head>
+
 <body>
-  
   <template id="question-template">
     <div class="question">
-      <p>{{question}}</p>
-      <ul>
-        <!-- Dynamically generated answer buttons will go here -->
-      </ul>
+      <p></p>
+      <ul></ul>
     </div>
   </template>
 
-  <!-- Template for each answer button -->
   <template id="button-template">
-    <li><button>{{A}}</button></li>
+    <li><button></button></li>
   </template>
   
-  <div style="font-size:120%;font-weight:bold;text-align:center">
-    <input type="file" onchange="on_upload(event)" />
+  <pre>
+    CSV: question,answer,wrong_1,wrong_2,...
+  </pre>
+
+  <div style="font-size:120%;font-weight:bold;text-align:center;margin-bottom:3em">
+    
+    <button onclick="paste_CSV()">Paste CSV</button>
+    
+    <input type="file" id="fileInput" onchange="load_CSV()" hidden>
+    <button type="button" onclick="document.getElementById('fileInput').click()">
+      From CSV file
+    </button>
   </div>
-  
-  <div id="quiz" style="min-height:100vh">
-    <!-- Quiz content will be dynamically inserted here -->
-  </div>
-  
+
+  <div id="quiz" style="min-height:100vh"></div>
+
   <div style="font-size:120%;font-weight:bold;text-align:center">
     <output id="percent">0</output> %
-    <output id="correct">0</output> / 
-    <output id="answered">0</output> / 
+    <output id="correct">0</output> /
+    <output id="answered">0</output> /
     <output id="total">0</output>
   </div>
-
 </body>
 </html>
-
