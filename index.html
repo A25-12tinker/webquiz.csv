@@ -1,133 +1,155 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/digitallytailored/classless@latest/classless.min.css">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Quiz</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/digitallytailored/classless@latest/classless.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Quiz</title>
 
-    <style>
-      body { padding: 5em 1em; }
-      .question { margin-bottom: 1.5em; }
-      .question ul { list-style-type: none; }
-      .question li { margin: 5px 0; }
-    </style>
+  <style>
+    body { padding: 5em 1em; }
+    .question { margin-bottom: 1.5em; }
+    .question ul { list-style-type: none; }
+    .question li { margin: 5px 0; }
+  </style>
 
-    <script>
-      class Field {
-        question = "";
-        answer = "";
-        wrong = [];
-        answered = false;
+  <script>
+    class Field {
+      question = "";
+      answer = "";
+      wrong = [];
+      answered = false;
 
-        constructor(q, a, w) {
-          this.question = q;
-          this.answer = a;
-          this.wrong = w;
+      constructor(q, a, w) {
+        this.question = q;
+        this.answer = a;
+        this.wrong = w;
+      }
+
+      get_shuffled_answers() {
+        return this.shuffle([this.answer, ...this.wrong]);
+      }
+
+      shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
         }
+        return arr;
+      }
+    }
 
-        get_shuffled_answers() {
-          return this.shuffle([this.answer, ...this.wrong]);
+    let fields = [];
+    let correctAnswers = 0;
+    let totalAnswered = 0;
+
+    function handleCSV(csv) {
+      correctAnswers = 0;
+      totalAnswered = 0;
+      fields = csv.split('\n').map(parseRow).filter(Boolean);
+      quiz_populate();
+    }
+
+    function parseRow(row) {
+      const c = row.split(',');
+      return c.length >= 2 ? new Field(c[0], c[1], c.slice(2)) : null;
+    }
+
+    function load_CSV() {
+      const f = document.getElementById('fileInput');
+      if (f.files.length) {
+        const r = new FileReader();
+        r.onload = e => handleCSV(e.target.result);
+        r.readAsText(f.files[0]);
+      }
+    }
+
+    async function paste_CSV() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) handleCSV(text);
+      } catch (e) {
+        alert("Clipboard access denied");
+      }
+    }
+
+    let lastWasPaste = false;
+
+    function paste_from_input(e) {
+      lastWasPaste = true;
+
+      const text = e.clipboardData.getData('text');
+      if (text) {
+        handleCSV(text);
+      }
+
+      e.target.value = '';
+      e.preventDefault();
+
+      setTimeout(() => lastWasPaste = false, 0);
+    }
+
+    function clear_if_not_paste(e) {
+      if (!lastWasPaste) {
+        e.target.value = '';
+      }
+    }
+
+    function quiz_populate() {
+      const q = document.getElementById('quiz');
+      q.innerHTML = '';
+      fields.forEach(f => q.appendChild(createQuestionElement(f)));
+      update_totals();
+    }
+
+    function createQuestionElement(field) {
+      const t = document.getElementById('question-template');
+      const c = document.importNode(t.content, true);
+      c.querySelector('p').innerText = field.question;
+
+      const ul = c.querySelector('ul');
+      field.get_shuffled_answers().forEach(a =>
+        ul.appendChild(createAnswerButton(a, field))
+      );
+
+      return c;
+    }
+
+    function createAnswerButton(answer, field) {
+      const t = document.getElementById('button-template');
+      const c = document.importNode(t.content, true);
+      const b = c.querySelector('button');
+
+      b.innerText = answer;
+      b.onclick = () => on_answer(field, b, answer === field.answer);
+
+      return c;
+    }
+
+    function on_answer(field, button, ok) {
+      if (!field.answered) {
+        field.answered = true;
+        totalAnswered++;
+
+        if (ok) {
+          button.classList.add('success');
+          correctAnswers++;
+        } else {
+          button.classList.add('danger');
         }
-
-        shuffle(arr) {
-          for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-          }
-          return arr;
-        }
       }
+      update_totals();
+    }
 
-      let fields = [];
-      let correctAnswers = 0;
-      let totalAnswered = 0;
-
-      function handleCSV(csv) {
-        correctAnswers = 0;
-        totalAnswered = 0;
-        fields = csv.split('\n').map(parseRow).filter(Boolean);
-        quiz_populate();
-      }
-
-      function parseRow(row) {
-        const c = row.split(',');
-        return c.length >= 2 ? new Field(c[0], c[1], c.slice(2)) : null;
-      }
-
-      function load_CSV() {
-        const f = document.getElementById('fileInput');
-        if (f.files.length) {
-          const r = new FileReader();
-          r.onload = e => handleCSV(e.target.result);
-          r.readAsText(f.files[0]);
-        }
-      }
-
-      async function paste_CSV() {
-        try {
-          const text = await navigator.clipboard.readText();
-          if (text) handleCSV(text);
-        } catch (e) {
-          alert("Clipboard access denied");
-        }
-      }
-
-      function quiz_populate() {
-        const q = document.getElementById('quiz');
-        q.innerHTML = '';
-        fields.forEach(f => q.appendChild(createQuestionElement(f)));
-        update_totals();
-      }
-
-      function createQuestionElement(field) {
-        const t = document.getElementById('question-template');
-        const c = document.importNode(t.content, true);
-        c.querySelector('p').innerText = field.question;
-
-        const ul = c.querySelector('ul');
-        field.get_shuffled_answers().forEach(a =>
-          ul.appendChild(createAnswerButton(a, field))
-        );
-
-        return c;
-      }
-
-      function createAnswerButton(answer, field) {
-        const t = document.getElementById('button-template');
-        const c = document.importNode(t.content, true);
-        const b = c.querySelector('button');
-
-        b.innerText = answer;
-        b.onclick = () => on_answer(field, b, answer === field.answer);
-
-        return c;
-      }
-
-      function on_answer(field, button, ok) {
-        if (!field.answered) {
-          field.answered = true;
-          totalAnswered++;
-
-          if (ok) {
-            button.classList.add('success');
-            correctAnswers++;
-          } else {
-            button.classList.add('danger');
-          }
-        }
-        update_totals();
-      }
-
-      function update_totals() {
-        document.getElementById('correct').innerText = correctAnswers;
-        document.getElementById('answered').innerText = totalAnswered;
-        document.getElementById('total').innerText = fields.length;
-        document.getElementById('percent').innerText =
-          Math.floor((correctAnswers / fields.length) * 100) || 0;
-      }
-    </script>
+    function update_totals() {
+      document.getElementById('correct').innerText = correctAnswers;
+      document.getElementById('answered').innerText = totalAnswered;
+      document.getElementById('total').innerText = fields.length;
+      document.getElementById('percent').innerText =
+        Math.floor((correctAnswers / fields.length) * 100) || 0;
+    }
+  </script>
 </head>
 
 <body>
@@ -141,15 +163,24 @@
   <template id="button-template">
     <li><button></button></li>
   </template>
-  
+
   <pre>
-    CSV: question,answer,wrong_1,wrong_2,...
+CSV: question,answer,wrong_1,wrong_2,...
   </pre>
 
   <div style="font-size:120%;font-weight:bold;text-align:center;margin-bottom:3em">
-    
+
+    <input
+      type="text"
+      class="paste-like-input"
+      placeholder="Paste CSV here"
+      onpaste="paste_from_input(event)"
+      oninput="clear_if_not_paste(event)"
+      style="display:inline-block;width:10em"
+    >
+
     <button onclick="paste_CSV()">Paste CSV</button>
-    
+
     <input type="file" id="fileInput" onchange="load_CSV()" hidden>
     <button type="button" onclick="document.getElementById('fileInput').click()">
       From CSV file
