@@ -10,8 +10,9 @@
   <style>
     body { padding: 5em 1em; }
     .question { margin-bottom: 1.5em; }
-    .question ul { list-style-type: none; }
+    .question ul { list-style-type: none; padding-left: 0; }
     .question li { margin: 5px 0; }
+    input[type="text"] { margin-right: 0.5em; }
   </style>
 
   <script>
@@ -69,7 +70,7 @@
       try {
         const text = await navigator.clipboard.readText();
         if (text) handleCSV(text);
-      } catch (e) {
+      } catch {
         alert("Clipboard access denied");
       }
     }
@@ -78,22 +79,15 @@
 
     function paste_from_input(e) {
       lastWasPaste = true;
-
       const text = e.clipboardData.getData('text');
-      if (text) {
-        handleCSV(text);
-      }
-
+      if (text) handleCSV(text);
       e.target.value = '';
       e.preventDefault();
-
       setTimeout(() => lastWasPaste = false, 0);
     }
 
     function clear_if_not_paste(e) {
-      if (!lastWasPaste) {
-        e.target.value = '';
-      }
+      if (!lastWasPaste) e.target.value = '';
     }
 
     function quiz_populate() {
@@ -109,9 +103,14 @@
       c.querySelector('p').innerText = field.question;
 
       const ul = c.querySelector('ul');
-      field.get_shuffled_answers().forEach(a =>
-        ul.appendChild(createAnswerButton(a, field))
-      );
+
+      if (field.wrong.length === 0) {
+        ul.appendChild(createTextAnswer(field));
+      } else {
+        field.get_shuffled_answers().forEach(a =>
+          ul.appendChild(createAnswerButton(a, field))
+        );
+      }
 
       return c;
     }
@@ -125,6 +124,41 @@
       b.onclick = () => on_answer(field, b, answer === field.answer);
 
       return c;
+    }
+
+    function createTextAnswer(field) {
+      const li = document.createElement('li');
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Type your answer';
+
+      const btn = document.createElement('button');
+      btn.innerText = 'Check';
+
+      btn.onclick = () => {
+        if (field.answered) return;
+
+        field.answered = true;
+        totalAnswered++;
+
+        const user = input.value.trim().toLowerCase();
+        const correct = field.answer.trim().toLowerCase();
+
+        if (user === correct) {
+          btn.classList.add('success');
+          correctAnswers++;
+        } else {
+          btn.classList.add('danger');
+        }
+
+        input.disabled = true;
+        update_totals();
+      };
+
+      li.appendChild(input);
+      li.appendChild(btn);
+      return li;
     }
 
     function on_answer(field, button, ok) {
@@ -169,16 +203,13 @@ CSV: question,answer,wrong_1,wrong_2,...
   </pre>
 
   <div style="font-size:120%;font-weight:bold;text-align:center;margin-bottom:3em">
-
     <input
       type="text"
-      class="paste-like-input"
       placeholder="Paste CSV here"
       onpaste="paste_from_input(event)"
       oninput="clear_if_not_paste(event)"
       style="display:inline-block;width:10em"
     >
-
     <button onclick="paste_CSV()">Paste CSV</button>
 
     <input type="file" id="fileInput" onchange="load_CSV()" hidden>
